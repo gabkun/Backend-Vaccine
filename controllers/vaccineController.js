@@ -62,6 +62,23 @@ export const getVaccines = async (req, res) => {
   }
 };
 
+export const getTotalVaccines = async (req, res) => {
+  try {
+    const sql = "SELECT COUNT(*) AS totalVaccines FROM tbl_vaccine";
+
+    db.query(sql, (err, result) => {
+      if (err) return res.status(500).json({ error: err });
+
+      res.status(200).json({
+        totalVaccines: result[0].totalVaccines
+      });
+    });
+
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+};
+
 // GET VACCINE BY ID
 export const getVaccineById = async (req, res) => {
   const { id } = req.params;

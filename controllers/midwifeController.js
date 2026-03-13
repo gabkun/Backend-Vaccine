@@ -103,6 +103,23 @@ export const getAllMidwives = async (req, res) => {
   }
 };
 
+export const getTotalMidwives = async (req, res) => {
+  try {
+    const sql = "SELECT COUNT(*) AS totalMidwives FROM tbl_midwife";
+
+    db.query(sql, (err, result) => {
+      if (err) return res.status(500).json({ error: err });
+
+      res.status(200).json({
+        totalMidwives: result[0].totalMidwives
+      });
+    });
+
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+};
+
 
 export const getMidwifeById = async (req, res) => {
   const { id } = req.params;

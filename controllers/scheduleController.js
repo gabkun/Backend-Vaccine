@@ -308,3 +308,20 @@ export const editVaccination = async (req, res) => {
     res.status(500).json({ error });
   }
 };
+
+export const getTotalSuccessfulVaccinations = async (req, res) => {
+  try {
+    const sql = "SELECT COUNT(*) AS totalSuccessfulVaccinations FROM tbl_scheduling WHERE status = 2";
+
+    db.query(sql, (err, result) => {
+      if (err) return res.status(500).json({ error: err });
+
+      res.status(200).json({
+        totalSuccessfulVaccinations: result[0].totalSuccessfulVaccinations
+      });
+    });
+
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+};

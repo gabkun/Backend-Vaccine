@@ -108,6 +108,23 @@ export const getAllInfants = async (req, res) => {
   }
 };
 
+export const getTotalInfants = async (req, res) => {
+  try {
+    const sql = "SELECT COUNT(*) AS totalInfants FROM tbl_infant";
+
+    db.query(sql, (err, result) => {
+      if (err) return res.status(500).json({ error: err });
+
+      res.status(200).json({
+        totalInfants: result[0].totalInfants
+      });
+    });
+
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+};
+
 // ✅ Fetch single infant by ID
 export const getInfantById = async (req, res) => {
   const { id } = req.params;

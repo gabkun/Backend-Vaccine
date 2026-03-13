@@ -8,6 +8,8 @@ import infantRoutes from "./routes/infantRoutes.js"
 import vaccineRoutes from "./routes/vaccineRoutes.js"
 import purokRoutes from "./routes/purokRoutes.js"
 import scheduleRoutes from "./routes/scheduleRoutes.js"
+import sumamaryRoutes from "./routes/summaryRoutes.js"
+import smsRoutes from "./routes/smsRoutes.js"
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -38,8 +40,10 @@ app.use("/auth", authRoutes);
 app.use("/midwife", midwifeRoutes);
 app.use("/infant", infantRoutes);
 app.use("/vaccine", vaccineRoutes);
+app.use("/summary", sumamaryRoutes);
 app.use("/purok", purokRoutes);
 app.use("/schedule", scheduleRoutes)
+app.use("/sms", smsRoutes)
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 

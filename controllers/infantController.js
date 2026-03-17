@@ -209,9 +209,12 @@ export const getInfantProfileById = async (req, res) => {
   }
 };
 
-// ✅ Update infant by ID
 export const updateInfant = async (req, res) => {
   const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ message: "Infant ID is required" });
+  }
 
   const {
     firstname,
@@ -232,80 +235,95 @@ export const updateInfant = async (req, res) => {
     m_lastname,
     f_contact,
     m_contact,
-    birth_document,
-    profile_pic,
   } = req.body;
 
-  // ✅ Validation
-  if (!id) {
-    return res.status(400).json({ message: "Required fields are missing" });
-  }
-
   try {
-    const sql = `
-      UPDATE tbl_infant SET
-        firstname = ?,
-        middlename = ?,
-        lastname = ?,
-        suffix = ?,
-        sex = ?,
-        dob = ?,
-        age_year = ?,
-        age_month = ?,
-        purok_id = ?,
-        home_add = ?,
-        f_firstname = ?,
-        f_middlename = ?,
-        f_lastname = ?,
-        m_firstname = ?,
-        m_middlename = ?,
-        m_lastname = ?,
-        f_contact = ?,
-        m_contact = ?,
-        birth_document = ?,
-        profile_pic = ?
-      WHERE id = ?
-    `;
+    // first get existing infant record
+    const findSql = "SELECT * FROM tbl_infant WHERE id = ?";
 
-    db.query(
-      sql,
-      [
-        firstname,
-        middlename || null,
-        lastname,
-        suffix || null,
-        sex || null,
-        dob,
-        age_year || null,
-        age_month || null,
-        purok_id,
-        home_add || null,
-        f_firstname || null,
-        f_middlename || null,
-        f_lastname || null,
-        m_firstname || null,
-        m_middlename || null,
-        m_lastname || null,
-        f_contact || null,
-        m_contact || null,
-        birth_document || null,
-        profile_pic || null,
-        id,
-      ],
-      (err, result) => {
-        if (err) return res.status(500).json({ error: err });
+    db.query(findSql, [id], (findErr, findResult) => {
+      if (findErr) return res.status(500).json({ error: findErr });
 
-        if (result.affectedRows === 0) {
-          return res.status(404).json({ message: "Infant not found" });
-        }
-
-        res.status(200).json({
-          message: "Infant record updated successfully",
-        });
+      if (findResult.length === 0) {
+        return res.status(404).json({ message: "Infant not found" });
       }
-    );
+
+      const existingInfant = findResult[0];
+
+      // uploaded files from multer
+      const uploadedBirthDocument = req.files?.birth_document?.[0]?.path
+        ? req.files.birth_document[0].path.replace(/\\/g, "/")
+        : existingInfant.birth_document;
+
+      const uploadedProfilePic = req.files?.profile_pic?.[0]?.path
+        ? req.files.profile_pic[0].path.replace(/\\/g, "/")
+        : existingInfant.profile_pic;
+
+      const sql = `
+        UPDATE tbl_infant SET
+          firstname = ?,
+          middlename = ?,
+          lastname = ?,
+          suffix = ?,
+          sex = ?,
+          dob = ?,
+          age_year = ?,
+          age_month = ?,
+          purok_id = ?,
+          home_add = ?,
+          f_firstname = ?,
+          f_middlename = ?,
+          f_lastname = ?,
+          m_firstname = ?,
+          m_middlename = ?,
+          m_lastname = ?,
+          f_contact = ?,
+          m_contact = ?,
+          birth_document = ?,
+          profile_pic = ?
+        WHERE id = ?
+      `;
+
+      db.query(
+        sql,
+        [
+          firstname,
+          middlename || null,
+          lastname,
+          suffix || null,
+          sex || null,
+          dob,
+          age_year || null,
+          age_month || null,
+          purok_id,
+          home_add || null,
+          f_firstname || null,
+          f_middlename || null,
+          f_lastname || null,
+          m_firstname || null,
+          m_middlename || null,
+          m_lastname || null,
+          f_contact || null,
+          m_contact || null,
+          uploadedBirthDocument,
+          uploadedProfilePic,
+          id,
+        ],
+        (err, result) => {
+          if (err) return res.status(500).json({ error: err });
+
+          if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Infant not found" });
+          }
+
+          return res.status(200).json({
+            message: "Infant record updated successfully",
+          });
+        }
+      );
+    });
   } catch (error) {
-    res.status(500).json({ error });
+    return res.status(500).json({ error });
   }
 };
 

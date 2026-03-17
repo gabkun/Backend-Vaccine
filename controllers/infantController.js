@@ -63,7 +63,7 @@ export const createInfant = async (req, res) => {
         firstname,
         middlename || null,
         lastname,
-        suffix,
+        suffix || null,
         sex,
         dob,
         age_year || null,

@@ -95,7 +95,6 @@ export const updatePurok = async (req, res) => {
   }
 
   try {
-    // ✅ Check duplicate name (exclude current record)
     db.query(
       "SELECT id FROM tbl_purok WHERE purok_name = ? AND id != ?",
       [purok_name, id],

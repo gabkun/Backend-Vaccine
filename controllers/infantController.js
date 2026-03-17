@@ -290,7 +290,7 @@ export const updateInfant = async (req, res) => {
           firstname,
           middlename || null,
           lastname,
-          suffix || null,
+          suffix || "",
           sex || null,
           dob,
           age_year || null,

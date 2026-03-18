@@ -259,39 +259,77 @@ export const updateMidwife = async (req, res) => {
 
 // ✅ Delete midwife by ID
 export const deleteMidwife = async (req, res) => {
-  const { id } = req.params; // midwife id
+  const { id } = req.params;
 
   if (!id) {
     return res.status(400).json({ message: "Midwife ID is required" });
   }
 
   try {
-    // ✅ Delete user account first
+    // 1. Set related schedules midwife_id to NULL
     db.query(
-      "DELETE FROM tbl_users WHERE info_id = ? AND role = 2",
+      "UPDATE tbl_scheduling SET midwife_id = NULL WHERE midwife_id = ?",
       [id],
-      (err) => {
-        if (err) return res.status(500).json({ error: err });
+      (err1, updateResult) => {
+        if (err1) {
+          return res.status(500).json({
+            step: "update tbl_scheduling",
+            message: err1.message,
+            code: err1.code,
+            sqlMessage: err1.sqlMessage,
+          });
+        }
 
-        // ✅ Delete midwife
+        // 2. Delete related user account
         db.query(
-          "DELETE FROM tbl_midwife WHERE id = ?",
+          "DELETE FROM tbl_users WHERE info_id = ? AND role = 2",
           [id],
-          (err, result) => {
-            if (err) return res.status(500).json({ error: err });
-
-            if (result.affectedRows === 0) {
-              return res.status(404).json({ message: "Midwife not found" });
+          (err2, userResult) => {
+            if (err2) {
+              return res.status(500).json({
+                step: "delete tbl_users",
+                message: err2.message,
+                code: err2.code,
+                sqlMessage: err2.sqlMessage,
+              });
             }
 
-            res.status(200).json({
-              message: "Midwife deleted successfully",
-            });
+            // 3. Delete midwife record
+            db.query(
+              "DELETE FROM tbl_midwife WHERE id = ?",
+              [id],
+              (err3, result) => {
+                if (err3) {
+                  return res.status(500).json({
+                    step: "delete tbl_midwife",
+                    message: err3.message,
+                    code: err3.code,
+                    sqlMessage: err3.sqlMessage,
+                  });
+                }
+
+                if (result.affectedRows === 0) {
+                  return res.status(404).json({
+                    message: "Midwife not found",
+                  });
+                }
+
+                return res.status(200).json({
+                  message: "Midwife deleted successfully",
+                  schedulingUpdated: updateResult.affectedRows,
+                  usersDeleted: userResult.affectedRows,
+                  midwivesDeleted: result.affectedRows,
+                });
+              }
+            );
           }
         );
       }
     );
   } catch (error) {
-    res.status(500).json({ error });
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };

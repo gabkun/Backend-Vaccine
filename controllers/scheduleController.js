@@ -1,4 +1,61 @@
 import db from "../utils/db.js";
+import axios from "axios";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const formatPhoneNumber = (number) => {
+  if (!number) return null;
+
+  let cleaned = String(number).trim().replace(/\s+/g, "");
+
+  if (cleaned.startsWith("09")) {
+    cleaned = "+63" + cleaned.substring(1);
+  } else if (cleaned.startsWith("639")) {
+    cleaned = "+" + cleaned;
+  }
+
+  return cleaned;
+};
+
+const sendSmsToRecipient = async (recipient, content, sender_id = null, metadata = null) => {
+  try {
+    if (!recipient || !content) return null;
+
+    const response = await axios.post(
+      "https://unismsapi.com/api/sms",
+      {
+        recipient,
+        content,
+        ...(sender_id ? { sender_id } : {}),
+        ...(metadata ? { metadata } : {}),
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        auth: {
+          username: process.env.UNISMS_API_KEY,
+          password: "",
+        },
+      }
+    );
+
+    return {
+      success: true,
+      recipient,
+      data: response.data,
+    };
+  } catch (error) {
+    console.error(`SMS FAILED for ${recipient}:`, error.response?.data || error.message);
+
+    return {
+      success: false,
+      recipient,
+      error: error.response?.data || error.message,
+    };
+  }
+};
 
 export const createVaccination = async (req, res) => {
   const {
@@ -12,7 +69,6 @@ export const createVaccination = async (req, res) => {
     completed_at,
   } = req.body;
 
-  // ✅ Validation for required fields
   if (
     !vaccine_id ||
     !infant_id ||
@@ -25,8 +81,7 @@ export const createVaccination = async (req, res) => {
   }
 
   try {
-    // ✅ Insert vaccination record
-    const sql = `
+    const insertSql = `
       INSERT INTO tbl_scheduling (
         vaccine_id,
         infant_id,
@@ -41,7 +96,7 @@ export const createVaccination = async (req, res) => {
     `;
 
     db.query(
-      sql,
+      insertSql,
       [
         vaccine_id,
         infant_id,
@@ -52,12 +107,89 @@ export const createVaccination = async (req, res) => {
         status,
         completed_at || null,
       ],
-      (err, result) => {
-        if (err) return res.status(500).json({ error: err });
+      (insertErr, insertResult) => {
+        if (insertErr) return res.status(500).json({ error: insertErr });
 
-        res.status(201).json({
-          message: "Vaccination record created successfully",
-          vaccinationId: result.insertId,
+        const fetchSql = `
+          SELECT
+            i.firstname,
+            i.middlename,
+            i.lastname,
+            i.suffix,
+            i.f_contact,
+            i.m_contact,
+            v.vaccine_name
+          FROM tbl_infant i
+          LEFT JOIN tbl_vaccine v ON v.id = ?
+          WHERE i.id = ?
+          LIMIT 1
+        `;
+
+        db.query(fetchSql, [vaccine_id, infant_id], async (fetchErr, fetchResult) => {
+          if (fetchErr) return res.status(500).json({ error: fetchErr });
+
+          if (!fetchResult || fetchResult.length === 0) {
+            return res.status(201).json({
+              message: "Vaccination record created successfully, but infant not found for SMS sending",
+              vaccinationId: insertResult.insertId,
+            });
+          }
+
+          const infant = fetchResult[0];
+
+          const fullName = [
+            infant.firstname,
+            infant.middlename,
+            infant.lastname,
+            infant.suffix,
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          const vaccineName = infant.vaccine_name || "vaccination";
+
+          const smsMessage = `Hi Mr/Ms. Your child ${fullName} is scheduled for ${vaccineName} on ${scheduled_on}. Please visit Barangay Canlandog Health Center.`;
+
+          const motherContact = formatPhoneNumber(infant.m_contact);
+          const fatherContact = formatPhoneNumber(infant.f_contact);
+
+          const smsResults = [];
+
+          if (motherContact) {
+            const motherSms = await sendSmsToRecipient(
+              motherContact,
+              smsMessage,
+              null,
+              {
+                source: "vaccination_schedule",
+                role: "mother",
+                infant_id,
+                vaccination_id: insertResult.insertId,
+              }
+            );
+            smsResults.push(motherSms);
+          }
+
+          if (fatherContact) {
+            const fatherSms = await sendSmsToRecipient(
+              fatherContact,
+              smsMessage,
+              null,
+              {
+                source: "vaccination_schedule",
+                role: "father",
+                infant_id,
+                vaccination_id: insertResult.insertId,
+              }
+            );
+            smsResults.push(fatherSms);
+          }
+
+          return res.status(201).json({
+            message: "Vaccination record created successfully",
+            vaccinationId: insertResult.insertId,
+            smsResults,
+          });
         });
       }
     );
@@ -65,7 +197,6 @@ export const createVaccination = async (req, res) => {
     res.status(500).json({ error });
   }
 };
-
 
 export const getVaccinationByInfantId = async (req, res) => {
   const { infant_id } = req.params;

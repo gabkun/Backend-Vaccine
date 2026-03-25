@@ -7,51 +7,67 @@ dotenv.config();
 const formatPhoneNumber = (number) => {
   if (!number) return null;
 
-  let cleaned = String(number).trim().replace(/\s+/g, "");
+  let cleaned = String(number).trim().replace(/\D/g, "");
 
   if (cleaned.startsWith("09")) {
-    cleaned = "+63" + cleaned.substring(1);
-  } else if (cleaned.startsWith("639")) {
-    cleaned = "+" + cleaned;
+    cleaned = "63" + cleaned.substring(1); // 09171234567 -> 639171234567
+  } else if (cleaned.startsWith("9") && cleaned.length === 10) {
+    cleaned = "63" + cleaned; // 9171234567 -> 639171234567
+  } else if (cleaned.startsWith("63")) {
+    // already okay
+  } else {
+    return null;
   }
 
   return cleaned;
 };
 
-const sendSmsToRecipient = async (recipient, content, sender_id = null, metadata = null) => {
+const sendSmsToRecipients = async (numbers, message) => {
   try {
-    if (!recipient || !content) return null;
+    if (!numbers || numbers.length === 0 || !message) {
+      return {
+        success: false,
+        error: "Numbers and message are required.",
+      };
+    }
+
+    if (message.trim().toUpperCase().startsWith("TEST")) {
+      return {
+        success: false,
+        error: 'Message must not start with the word "TEST".',
+      };
+    }
+
+    const payload = new URLSearchParams();
+    payload.append("apikey", process.env.SEMAPHORE_API_KEY);
+    payload.append("number", numbers.join(",")); // send to multiple recipients in one POST
+    payload.append("message", message);
+    payload.append("sendername", "BrgyVaccine");
 
     const response = await axios.post(
-      "https://unismsapi.com/api/sms",
-      {
-        recipient,
-        content,
-        ...(sender_id ? { sender_id } : {}),
-        ...(metadata ? { metadata } : {}),
-      },
+      "https://api.semaphore.co/api/v4/messages",
+      payload,
       {
         headers: {
-          "Content-Type": "application/json",
-        },
-        auth: {
-          username: process.env.UNISMS_API_KEY,
-          password: "",
+          "Content-Type": "application/x-www-form-urlencoded",
         },
       }
     );
 
     return {
       success: true,
-      recipient,
+      recipients: numbers,
       data: response.data,
     };
   } catch (error) {
-    console.error(`SMS FAILED for ${recipient}:`, error.response?.data || error.message);
+    console.error(
+      "SMS FAILED:",
+      error.response?.data || error.message
+    );
 
     return {
       success: false,
-      recipient,
+      recipients: numbers,
       error: error.response?.data || error.message,
     };
   }
@@ -108,7 +124,9 @@ export const createVaccination = async (req, res) => {
         completed_at || null,
       ],
       (insertErr, insertResult) => {
-        if (insertErr) return res.status(500).json({ error: insertErr });
+        if (insertErr) {
+          return res.status(500).json({ error: insertErr });
+        }
 
         const fetchSql = `
           SELECT
@@ -126,7 +144,9 @@ export const createVaccination = async (req, res) => {
         `;
 
         db.query(fetchSql, [vaccine_id, infant_id], async (fetchErr, fetchResult) => {
-          if (fetchErr) return res.status(500).json({ error: fetchErr });
+          if (fetchErr) {
+            return res.status(500).json({ error: fetchErr });
+          }
 
           if (!fetchResult || fetchResult.length === 0) {
             return res.status(201).json({
@@ -153,48 +173,27 @@ export const createVaccination = async (req, res) => {
           const motherContact = formatPhoneNumber(infant.m_contact);
           const fatherContact = formatPhoneNumber(infant.f_contact);
 
-          const smsResults = [];
+          const recipients = [...new Set([motherContact, fatherContact].filter(Boolean))];
 
-          if (motherContact) {
-            const motherSms = await sendSmsToRecipient(
-              motherContact,
-              smsMessage,
-              null,
-              {
-                source: "vaccination_schedule",
-                role: "mother",
-                infant_id,
-                vaccination_id: insertResult.insertId,
-              }
-            );
-            smsResults.push(motherSms);
-          }
+          let smsResult = {
+            success: false,
+            error: "No valid recipient numbers found.",
+          };
 
-          if (fatherContact) {
-            const fatherSms = await sendSmsToRecipient(
-              fatherContact,
-              smsMessage,
-              null,
-              {
-                source: "vaccination_schedule",
-                role: "father",
-                infant_id,
-                vaccination_id: insertResult.insertId,
-              }
-            );
-            smsResults.push(fatherSms);
+          if (recipients.length > 0) {
+            smsResult = await sendSmsToRecipients(recipients, smsMessage);
           }
 
           return res.status(201).json({
             message: "Vaccination record created successfully",
             vaccinationId: insertResult.insertId,
-            smsResults,
+            smsResult,
           });
         });
       }
     );
   } catch (error) {
-    res.status(500).json({ error });
+    return res.status(500).json({ error: error.message || error });
   }
 };
 

@@ -317,6 +317,64 @@ export const getScheduledInfantsThisMonth = async (req, res) => {
   }
 };
 
+export const getScheduledInfantsAllMonths = async (req, res) => {
+  try {
+    const sql = `
+      SELECT
+        s.id AS schedule_id,
+
+        -- Infant Full Name Parts
+        i.firstname,
+        i.middlename,
+        i.lastname,
+        i.suffix,
+
+        -- Schedule Info
+        DATE_FORMAT(s.scheduled_on, '%Y-%m-%d') AS scheduled_on,
+        s.status,
+
+        -- Midwife Info
+        s.midwife_id,
+        m.firstname AS midwife_firstname,
+        m.middlename AS midwife_middlename,
+        m.lastname AS midwife_lastname,
+
+        -- Vaccine Info
+        s.vaccine_id,
+        v.vaccine_name,
+
+        -- Dose Type Mapping
+        s.dose_type,
+        CASE
+          WHEN s.dose_type = 1 THEN '1st Dose'
+          WHEN s.dose_type = 2 THEN '2nd Dose'
+          WHEN s.dose_type = 3 THEN 'Booster Shot'
+          ELSE 'Unknown'
+        END AS dose_type_label
+
+      FROM tbl_scheduling s
+      INNER JOIN tbl_infant i 
+        ON i.id = s.infant_id
+      INNER JOIN tbl_vaccine v 
+        ON v.id = s.vaccine_id
+      INNER JOIN tbl_midwife m
+        ON m.id = s.midwife_id
+
+      WHERE s.status = 1
+
+      ORDER BY s.scheduled_on ASC, s.id ASC
+    `;
+
+    db.query(sql, (err, results) => {
+      if (err) return res.status(500).json({ error: err });
+      res.status(200).json(results);
+    });
+
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+};
+
 export const completeVaccination = async (req, res) => {
   const { schedule_id } = req.params;
   const { remarks } = req.body;
